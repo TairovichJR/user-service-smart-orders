@@ -3,7 +3,6 @@ package com.smartorders.userservice.user_service.service;
 import com.smartorders.userservice.user_service.dto.AddressDto;
 import com.smartorders.userservice.user_service.dto.AddAddressRequest;
 import com.smartorders.userservice.user_service.dto.UpdateAddressRequest;
-
 import java.util.List;
 
 public interface AddressService {

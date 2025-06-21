@@ -27,35 +27,44 @@ public class AddressServiceImpl implements AddressService {
     private final AddressRepository addressRepository;
 
     @Override
-    public AddressDto addAddressForUser(AddAddressRequest request) {
-        validateAddressRequest(request);
+     public AddressDto addAddressForUser(AddAddressRequest request) {
+         validateAddressRequest(request);
+         User user = getAuthenticatedUser();
+         return addAddressToUser(user, request);
+     }
 
-        User user = getAuthenticatedUser();
+     @Override
+     public AddressDto addAddressForUserByAdmin(Long userId, AddAddressRequest request) {
+         validateAddressRequest(request);
+         User user = userRepository.findById(userId)
+                 .orElseThrow(() -> new UserNotFoundException("User not found"));
+         return addAddressToUser(user, request);
+     }
 
-        Address address = Address.builder()
-                .street(request.getStreet())
-                .city(request.getCity())
-                .postalCode(request.getPostalCode())
-                .state(request.getState())
-                .country(request.getCountry())
-                .isDefault(request.getIsDefault())
-                .user(user)
-                .build();
+     private AddressDto addAddressToUser(User user, AddAddressRequest request) {
+         Address address = Address.builder()
+                 .street(request.getStreet())
+                 .city(request.getCity())
+                 .postalCode(request.getPostalCode())
+                 .state(request.getState())
+                 .country(request.getCountry())
+                 .isDefault(request.getIsDefault())
+                 .user(user)
+                 .build();
 
-        // Add the new address to the user's address list
-        user.getAddresses().add(address);
+         user.getAddresses().add(address);
 
-        // Handle default address logic
-        if (address.getIsDefault()) {
-            user.getAddresses().stream()
-                    .filter(a -> a != address)
-                    .forEach(a -> a.setIsDefault(false));
-        }
+         if (address.getIsDefault()) {
+             user.getAddresses().stream()
+                     .filter(a -> a != address)
+                     .forEach(a -> a.setIsDefault(false));
+         }
 
-        userRepository.save(user);
-        return mapToDto(address);
-    }
+         Address savedAddress = addressRepository.save(address);
+         userRepository.save(user);
 
+         return mapToDto(savedAddress);
+     }
     @Override
     public AddressDto updateAddressForUser(Long addressId, UpdateAddressRequest request) {
 
@@ -95,7 +104,6 @@ public class AddressServiceImpl implements AddressService {
         }
 
         Address updatedAddress = addressRepository.save(address);
-
         return mapToDto(updatedAddress);
     }
 
@@ -144,31 +152,6 @@ public class AddressServiceImpl implements AddressService {
                     .toList();
         }
         return List.of();
-    }
-
-    @Override
-    public AddressDto addAddressForUserByAdmin(Long userId, AddAddressRequest request) {
-        validateAddressRequest(request);
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new UserNotFoundException("User not found"));
-        Address address = Address.builder()
-                .street(request.getStreet())
-                .city(request.getCity())
-                .postalCode(request.getPostalCode())
-                .state(request.getState())
-                .country(request.getCountry())
-                .isDefault(request.getIsDefault())
-                .user(user)
-                .build();
-
-        user.getAddresses().add(address);
-        if (address.getIsDefault()) {
-            user.getAddresses().stream()
-                    .filter(a -> a != address)
-                    .forEach(a -> a.setIsDefault(false));
-        }
-        userRepository.save(user);
-        return mapToDto(address);
     }
 
     @Override
@@ -237,6 +220,14 @@ public class AddressServiceImpl implements AddressService {
 
     @Override
     public List<AddressDto> getAllAddressesForUserByAdmin(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+        List<Address> addresses = addressRepository.findByUserId(user.getId());
+        if (addresses != null && !addresses.isEmpty()) {
+            return addresses.stream()
+                    .map(this::mapToDto)
+                    .toList();
+        }
         return List.of();
     }
 

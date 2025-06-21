@@ -3,7 +3,6 @@ package com.smartorders.userservice.user_service.dto;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;

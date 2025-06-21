@@ -8,16 +8,22 @@ import lombok.Setter;
 @Getter
 @Setter
 public class AddAddressRequest {
+
     @NotBlank
     private String street;
+
     @NotBlank
     private String city;
+
     @NotBlank
     private String postalCode;
+
     @NotBlank
     private String state;
+
     @NotBlank
     private String country;
+
     @NotNull
     private Boolean isDefault;
 }

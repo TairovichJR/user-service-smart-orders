@@ -8,8 +8,8 @@ import lombok.Setter;
 @Setter
 @AllArgsConstructor
 public class UserSearchRequest {
-    private Long userId;
-    private String name;
+    private String firstName;
+    private String lastName;
     private String email;
     private String role;
     private Boolean isActive;

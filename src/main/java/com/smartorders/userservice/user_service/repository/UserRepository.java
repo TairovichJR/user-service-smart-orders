@@ -13,13 +13,9 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificationExecutor<User> {
 
     Optional<User> findByEmail(String email);
-
     List<User> findByRole(Role role);
-
     Optional<User> findByEmailAndActiveTrue(String email);
-
     List<User> findAllByActiveFalseAndDeactivatedAtBefore(LocalDateTime cutoff);
-
     Optional<User> findByResetToken(String resetToken);
 
 }

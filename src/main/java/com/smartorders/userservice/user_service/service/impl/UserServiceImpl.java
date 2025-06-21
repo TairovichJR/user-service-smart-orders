@@ -23,7 +23,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.util.List;
-
 import static com.smartorders.userservice.user_service.util.EmailUtils.normalize;
 
 @Service
@@ -31,7 +30,7 @@ import static com.smartorders.userservice.user_service.util.EmailUtils.normalize
 public class UserServiceImpl implements UserService {
 
     private static final long AUTH_TOKEN_EXPIRATION_MS = 1000 * 60 * 60 * 24; // 24 hours
-    private static final long PASSWORD_RESET_TOKEN_EXPIRATION_MS = 1000 * 60 * 30; // 1 hour
+    private static final long PASSWORD_RESET_TOKEN_EXPIRATION_MS = 1000 * 60 * 30; // 30 mins
 
     private final UserRepository userRepository;
     private final PasswordEncoder encoder;
@@ -180,9 +179,8 @@ public class UserServiceImpl implements UserService {
     @Override
     public void deactivateCurrentUser() {
         User user = getAuthenticatedUser();
-        user.setActive(false);
-        user.setDeactivatedAt(LocalDateTime.now());
-        userRepository.save(user);
+
+        deactivateUser(user);
     }
 
     @Transactional
@@ -193,6 +191,13 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
+        deactivateUser(user);
+    }
+
+    private void deactivateUser(User user) {
+        if (!user.isActive()) {
+            throw new UserNotActiveException("User account is already inactive");
+        }
         user.setActive(false);
         user.setDeactivatedAt(LocalDateTime.now());
         userRepository.save(user);
@@ -251,12 +256,13 @@ public class UserServiceImpl implements UserService {
             throw new BadRequestException("Search request cannot be null");
         }
 
-        if (request.getUserId() != null && request.getUserId() < 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid userId value: " + request.getUserId());
-        }
-        if (request.getName() != null && request.getName().trim().isEmpty()) {
+        if (request.getFirstName() != null && request.getFirstName().trim().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Name cannot be empty");
         }
+        if (request.getLastName() != null && request.getLastName().trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Last name cannot be empty");
+        }
+
         if (request.getEmail() != null && !request.getEmail().matches("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid email format: " + request.getEmail());
         }

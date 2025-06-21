@@ -11,11 +11,11 @@ public class UserSpecification {
         return(root, query, cb) -> {
             Predicate predicate = cb.conjunction();
 
-            if (request.getUserId() != null && request.getUserId() > 0) {
-                predicate = cb.and(predicate, cb.equal(root.get("id"), request.getUserId()));
+            if (request.getFirstName() != null && !request.getFirstName().isEmpty()) {
+                predicate = cb.and(predicate, cb.like(cb.lower(root.get("firstName")), "%" + request.getFirstName().toLowerCase() + "%"));
             }
-            if (request.getName() != null && !request.getName().isEmpty()) {
-                predicate = cb.and(predicate, cb.like(cb.lower(root.get("name")), "%" + request.getName().toLowerCase() + "%"));
+            if (request.getLastName() != null && !request.getLastName().isEmpty()) {
+                predicate = cb.and(predicate, cb.like(cb.lower(root.get("lastName")), "%" + request.getLastName().toLowerCase() + "%"));
             }
             if (request.getEmail() != null && !request.getEmail().isEmpty()) {
                 predicate = cb.and(predicate, cb.equal(cb.lower(root.get("email")), request.getEmail().toLowerCase()));
