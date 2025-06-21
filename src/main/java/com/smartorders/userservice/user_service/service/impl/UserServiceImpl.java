@@ -42,8 +42,6 @@ public class UserServiceImpl implements UserService {
     @Override
     public UserDto registerUser(RegisterRequest request) {
 
-        validateRegisterRequest(request);
-
         String email = normalize(request.getEmail());
 
         userRepository.findByEmail(email)
@@ -57,9 +55,8 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public JwtResponse loginUser(LoginRequest request) {
+    public AuthUserDto loginUser(LoginRequest request) {
 
-        validateLoginRequest(request);
         String email = normalize(request.getEmail());
 
         // 🔐 Let Spring Security handle authentication (throws exception if invalid)
@@ -77,8 +74,14 @@ public class UserServiceImpl implements UserService {
         // 🔑 Generate JWT
         String token = jwtService.generateToken(user.getEmail(), AUTH_TOKEN_EXPIRATION_MS);
 
-        // 📦 Return user + token
-        return new JwtResponse(userMapper.toUserDto(user), token);
+        return AuthUserDto.builder()
+                .email(user.getEmail())
+                .role(user.getRole().name())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .id(user.getId())
+                .token(token)
+                .build();
     }
 
     @Override
@@ -125,6 +128,12 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public void logout(HttpServletRequest request) {
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
+            throw new UserNotAuthenticatedException("You must be authenticated to log out.");
+        }
+
         SecurityContextHolder.clearContext();
         if (request.getSession(false) != null) {
             request.getSession(false).invalidate();
@@ -263,18 +272,6 @@ public class UserServiceImpl implements UserService {
                 .stream()
                 .map(userMapper::toUserDto)
                 .toList();
-    }
-
-    private static void validateRegisterRequest(RegisterRequest request) {
-        if(request == null || request.getEmail() == null || request.getPassword() == null) {
-            throw new InvalidUserDataException("Request cannot be null and must contain email and password");
-        }
-    }
-
-    private static void validateLoginRequest(LoginRequest request) {
-        if (request == null || request.getEmail() == null || request.getPassword() == null) {
-            throw new InvalidUserDataException("Request cannot be null and must contain email and password");
-        }
     }
 
     private User getAuthenticatedUser() {

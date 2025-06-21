@@ -1,6 +1,5 @@
 package com.smartorders.userservice.user_service.dto;
 
-import jakarta.validation.constraints.Email;
 import lombok.Getter;
 import lombok.Setter;
 

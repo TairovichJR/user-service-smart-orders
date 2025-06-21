@@ -1,6 +1,8 @@
 package com.smartorders.userservice.user_service.exception;
 
-public class UserNotFoundException extends RuntimeException {
+import org.springframework.security.core.AuthenticationException;
+
+public class UserNotFoundException extends AuthenticationException {
 
     public UserNotFoundException(String message) {
         super(message);

@@ -12,17 +12,17 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class RegisterRequest {
 
-    @NotBlank
+    @NotBlank(message = "First name cannot be blank")
     private String firstName;
 
-    @NotBlank
+    @NotBlank(message = "Last name cannot be blank")
     private String lastName;
 
-    @NotBlank
+    @NotBlank(message = "Email cannot be blank")
     @Email(message = "Invalid email format")
     private String email;
 
-    @NotBlank
+    @NotBlank(message = "Password cannot be blank")
     @Pattern(
             regexp = "^(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,30}$",
             message = "Password must be 8–30 characters long, include an uppercase letter, a number, and a special character."

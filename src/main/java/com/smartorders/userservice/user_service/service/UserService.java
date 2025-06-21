@@ -6,7 +6,7 @@ import java.util.List;
 
 public interface UserService {
     UserDto registerUser(RegisterRequest request);
-    JwtResponse loginUser(LoginRequest request);
+    AuthUserDto loginUser(LoginRequest request);
     UserDto getCurrentUser();
     UserDto updateProfile(UpdateProfileRequest request);
     void changePassword(ChangePasswordRequest request);

@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/v1")
 @RequiredArgsConstructor
 public class UserController {
 
@@ -25,7 +25,7 @@ public class UserController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<JwtResponse> login(@RequestBody @Valid LoginRequest request){
+    public ResponseEntity<AuthUserDto> login(@RequestBody @Valid LoginRequest request){
         return ResponseEntity.status(HttpStatus.OK).body(userService.loginUser(request));
     }
 
