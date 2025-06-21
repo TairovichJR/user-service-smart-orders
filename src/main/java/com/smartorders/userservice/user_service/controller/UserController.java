@@ -9,7 +9,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -30,24 +29,28 @@ public class UserController {
         return ResponseEntity.status(HttpStatus.OK).body(userService.loginUser(request));
     }
 
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @GetMapping("/profile")
     public ResponseEntity<UserDto> getCurrentUser() {
         UserDto userDto = userService.getCurrentUser();
         return ResponseEntity.ok(userDto);
     }
 
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @PutMapping("/profile")
     public ResponseEntity<UserDto> updateProfile(@RequestBody @Valid UpdateProfileRequest request) {
         UserDto updatedUser = userService.updateProfile(request);
         return ResponseEntity.ok(updatedUser);
     }
 
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @PostMapping("/change-password")
     public ResponseEntity<Void> changePassword(@RequestBody @Valid ChangePasswordRequest request) {
         userService.changePassword(request);
         return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
     }
 
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(HttpServletRequest request){
         userService.logout(request);
@@ -55,16 +58,16 @@ public class UserController {
     }
 
     @PreAuthorize("hasRole('ADMIN')")
-    @PostMapping("/users/{email}/role")
-    public ResponseEntity<Void> changeUserRole(@PathVariable String email, @RequestParam String role) {
-        userService.changeUserRole(email, role);
+    @PostMapping("/users/{userId}/role")
+    public ResponseEntity<Void> changeUserRole(@PathVariable Long userId, @RequestParam String role) {
+        userService.changeUserRole(userId, role);
         return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
     }
 
     @PreAuthorize("hasRole('ADMIN')")
-    @DeleteMapping("/users/{email}/role")
-    public ResponseEntity<Void> removeUserRole(@PathVariable String email) {
-        userService.removeUserRole(email);
+    @DeleteMapping("/users/{userId}/role")
+    public ResponseEntity<Void> removeUserRole(@PathVariable Long userId) {
+        userService.removeUserRole(userId);
         return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
     }
 
@@ -75,32 +78,35 @@ public class UserController {
         return ResponseEntity.ok(users);
     }
 
-    @DeleteMapping("deactivate")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    @DeleteMapping("/deactivate")
     public ResponseEntity<String> deactivateAccount(){
         userService.deactivateCurrentUser();
         return ResponseEntity.ok("Your account is scheduled for deletion after 5 minutes. You can recover it before then");
     }
 
     @PreAuthorize("hasRole('ADMIN')")
-    @DeleteMapping("/users/{email}/deactivate")
-    public ResponseEntity<String> deactivateUser(@PathVariable String email) {
-        userService.deactivateUser(email);
+    @DeleteMapping("/users/{userId}/deactivate")
+    public ResponseEntity<String> deactivateUser(@PathVariable Long userId) {
+        userService.deactivateUser(userId);
         return ResponseEntity.ok("User account is scheduled for deletion after 5 minutes. It can be recovered before then.");
     }
 
     @PreAuthorize("hasRole('ADMIN')")
-    @DeleteMapping("/users/{email}/delete")
-    public ResponseEntity<String> deleteUser(@PathVariable String email) {
-        userService.deleteUser(email);
+    @DeleteMapping("/users/{userId}/delete")
+    public ResponseEntity<String> deleteUser(@PathVariable Long userId) {
+        userService.deleteUser(userId);
         return ResponseEntity.ok("User account has been permanently deleted.");
     }
 
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @PostMapping("/request-password-reset")
-    public ResponseEntity<Void> requestPasswordReset(@RequestParam @Valid String email) {
-        userService.requestPasswordReset(email);
+    public ResponseEntity<Void> requestPasswordReset() {
+        userService.requestPasswordReset();
         return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
     }
 
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @PostMapping("/reset-password")
     public ResponseEntity<Void> resetPassword(@RequestBody @Valid PasswordResetRequest request) {
         userService.resetPassword(request);
@@ -110,25 +116,6 @@ public class UserController {
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/users/search")
     public ResponseEntity<List<UserDto>> searchUsers(@RequestBody @Valid UserSearchRequest request) {
-        // Validate userId (must be positive if present)
-        if (request.getUserId() != null && request.getUserId() < 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid userId value: " + request.getUserId());
-        }
-        // Validate name (optional: non-empty, no special chars, etc.)
-        if (request.getName() != null && request.getName().trim().isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Name cannot be empty");
-        }
-        // Validate email (simple regex)
-        if (request.getEmail() != null && !request.getEmail().matches("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid email format: " + request.getEmail());
-        }
-        // Validate role (must be ADMIN or USER if present)
-        if (request.getRole() != null &&
-                !request.getRole().equals("ADMIN") &&
-                !request.getRole().equals("USER")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid role value: " + request.getRole());
-        }
-        // Validate isActive (no validation needed for Boolean, but you can check for null if required)
         List<UserDto> users = userService.searchUsers(request);
         return ResponseEntity.ok(users);
     }

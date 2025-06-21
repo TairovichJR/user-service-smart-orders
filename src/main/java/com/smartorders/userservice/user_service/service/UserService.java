@@ -11,13 +11,13 @@ public interface UserService {
     UserDto updateProfile(UpdateProfileRequest request);
     void changePassword(ChangePasswordRequest request);
     void logout(HttpServletRequest request);
-    void changeUserRole(String email, String role);
-    void removeUserRole(String email);
+    void changeUserRole(Long userId, String role);
+    void removeUserRole(Long userId);
     List<UserDto> getUsersByRole(String role);
     void deactivateCurrentUser();
-    void deactivateUser(String email);
-    void deleteUser(String email);
-    void requestPasswordReset(String email);
+    void deactivateUser(Long userId);
+    void deleteUser(Long userId);
+    void requestPasswordReset();
     void resetPassword(PasswordResetRequest request);
     List<UserDto> searchUsers(UserSearchRequest request);
 }

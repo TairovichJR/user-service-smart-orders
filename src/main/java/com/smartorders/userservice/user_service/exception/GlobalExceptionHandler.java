@@ -83,4 +83,11 @@ public class GlobalExceptionHandler {
                 new ErrorResponse(exception.getMessage())
         );
     }
+
+    @ExceptionHandler(UserNotActiveException.class)
+    public ResponseEntity<ErrorResponse> handleUserNotActiveException(UserNotActiveException exception) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
+                new ErrorResponse(exception.getMessage())
+        );
+    }
 }

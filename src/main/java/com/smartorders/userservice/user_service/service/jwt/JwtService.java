@@ -13,14 +13,14 @@ public class JwtService {
     private static final long EXPIRATION_TIME = 1000 * 60 * 60 * 24; // 24 hours
     private final Key key = Keys.secretKeyFor(SignatureAlgorithm.HS256); // secure random key
 
-    public String generateToken(String email) {
-        return Jwts.builder()
-                .setSubject(email)
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
-                .signWith(key)
-                .compact();
-    }
+//    public String generateToken(String email) {
+//        return Jwts.builder()
+//                .setSubject(email)
+//                .setIssuedAt(new Date())
+//                .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
+//                .signWith(key)
+//                .compact();
+//    }
 
     public String extractEmail(String token) {
         return Jwts.parserBuilder()
@@ -46,11 +46,11 @@ public class JwtService {
         return expiration.before(new Date());
     }
 
-    public String generateResetToken(String email) {
+    public String generateToken(String email, long expirationTime) {
         return Jwts.builder()
                 .setSubject(email)
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 30)) // Set a shorter expiration for reset tokens
+                .setExpiration(new Date(System.currentTimeMillis() + expirationTime)) // Set a shorter expiration for reset tokens
                 .signWith(key)
                 .compact();
     }

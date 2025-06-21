@@ -12,21 +12,26 @@ import com.smartorders.userservice.user_service.service.jwt.JwtService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
+
 import static com.smartorders.userservice.user_service.util.EmailUtils.normalize;
 
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
+
+    private static final long AUTH_TOKEN_EXPIRATION_MS = 1000 * 60 * 60 * 24; // 24 hours
+    private static final long PASSWORD_RESET_TOKEN_EXPIRATION_MS = 1000 * 60 * 30; // 1 hour
 
     private final UserRepository userRepository;
     private final PasswordEncoder encoder;
@@ -36,16 +41,15 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserDto registerUser(RegisterRequest request) {
-        if(request == null || request.getEmail() == null || request.getPassword() == null) {
-            throw new InvalidUserDataException("Request cannot be null and must contain email and password");
-        }
+
+        validateRegisterRequest(request);
 
         String email = normalize(request.getEmail());
-        Optional<User> foundUser = userRepository.findByEmail(email);
 
-        if (foundUser.isPresent()){
-            throw new UserAlreadyExistsException("User with email id " + request.getEmail() + " already exists in db");
-        }
+        userRepository.findByEmail(email)
+                .ifPresent(user -> {
+                    throw new UserAlreadyExistsException("User with email id " + request.getEmail() + " already exists in db");
+                });
 
         User user = userMapper.toUser(request, encoder.encode(request.getPassword()));
         User savedUser = userRepository.save(user);
@@ -54,11 +58,8 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public JwtResponse loginUser(LoginRequest request) {
-        
-        if (request == null || request.getEmail() == null || request.getPassword() == null) {
-            throw new InvalidUserDataException("Request cannot be null and must contain email and password");
-        }
-        // Normalize email
+
+        validateLoginRequest(request);
         String email = normalize(request.getEmail());
 
         // 🔐 Let Spring Security handle authentication (throws exception if invalid)
@@ -74,7 +75,7 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new InvalidCredentialsException("Email or Password is incorrect"));
 
         // 🔑 Generate JWT
-        String token = jwtService.generateToken(user.getEmail());
+        String token = jwtService.generateToken(user.getEmail(), AUTH_TOKEN_EXPIRATION_MS);
 
         // 📦 Return user + token
         return new JwtResponse(userMapper.toUserDto(user), token);
@@ -82,69 +83,49 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserDto getCurrentUser() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
-            throw new UserNotAuthenticatedException("User is not authenticated");
-        }
-        String email = authentication.getName();
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UserNotFoundException("User not found"));
-        return userMapper.toUserDto(user);
+        return userMapper.toUserDto(getAuthenticatedUser());
     }
 
     @Override
     public UserDto updateProfile(UpdateProfileRequest request) {
 
-        if (request == null || request.getEmail() == null || request.getName() == null) {
-            throw new InvalidUserDataException("Request cannot be null and must contain email and name");
+        if (request == null) {
+            throw new InvalidUserDataException("Request cannot be null");
         }
 
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
-            throw new UserNotAuthenticatedException("User is not authenticated");
-        }
-        String currentEmail = authentication.getName();
-        if (!currentEmail.equals(request.getEmail())) {
-            throw new UserNotAuthorizedException("You are not authorized to update this profile");
-        }
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new UserNotFoundException("User not found"));
-        user.setName(request.getName());
-        // Add handling for more fields if needed
+        User user = getAuthenticatedUser();
+
+        if (request.getFirstName() != null) user.setFirstName(request.getFirstName());
+        if (request.getLastName() != null) user.setLastName(request.getLastName());
+        if (request.getPhoneNumber() != null) user.setPhoneNumber(request.getPhoneNumber());
+        if (request.getProfileImageUrl() != null) user.setProfileImageUrl(request.getProfileImageUrl());
+        if (request.getDateOfBirth() != null) user.setDateOfBirth(request.getDateOfBirth());
+
         User savedUser = userRepository.save(user);
         return userMapper.toUserDto(savedUser);
     }
 
+    @Transactional
     @Override
     public void changePassword(ChangePasswordRequest request) {
         
         if (request == null || request.getOldPassword() == null || request.getNewPassword() == null) {
             throw new InvalidUserDataException("Request cannot be null and must contain old and new passwords");
         }
-        
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
-            throw new UserNotAuthenticatedException("User is not authenticated");
-        }
-        String email = authentication.getName();
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UserNotFoundException("User not found"));
 
-        // Verify old password
+        User user = getAuthenticatedUser();
+
         if (!encoder.matches(request.getOldPassword(), user.getPassword())) {
             throw new InvalidCredentialsException("Old password is incorrect");
         }
 
-        // Update to new password
         user.setPassword(encoder.encode(request.getNewPassword()));
         userRepository.save(user);
     }
 
     @Override
     public void logout(HttpServletRequest request) {
-        // Clear the Spring Security context
         SecurityContextHolder.clearContext();
-        // Optionally, invalidate the HTTP session if it exists
         if (request.getSession(false) != null) {
             request.getSession(false).invalidate();
         }
@@ -152,108 +133,106 @@ public class UserServiceImpl implements UserService {
 
 
     @Override
-    public void changeUserRole(String email, String role) {
-        User user = userRepository.findByEmail(normalize(email))
+    public void changeUserRole(Long userId, String role) {
+        validateUserId(userId);
+        validateRole(role);
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
-
-        // Validate role
-        if (!role.equalsIgnoreCase("USER") && !role.equalsIgnoreCase("ADMIN")) {
-            throw new InvalidRoleException("Invalid role specified");
-        }
-
-        // Update role
         user.setRole(Role.valueOf(role.toUpperCase()));
         userRepository.save(user);
     }
 
+    private void validateRole(String role) {
+        if (role == null || (!role.equalsIgnoreCase(Role.USER.name()) && !role.equalsIgnoreCase(Role.ADMIN.name()))) {
+            throw new InvalidRoleException("Invalid role specified");
+        }
+    }
+
     @Override
-    public void removeUserRole(String email) {
-        User user = userRepository.findByEmail(normalize(email))
+    public void removeUserRole(Long userId) {
+        validateUserId(userId);
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
-        // Remove role by setting it to USER
         user.setRole(Role.USER);
         userRepository.save(user);
     }
 
     @Override
     public List<UserDto> getUsersByRole(String role) {
-        if (!role.equalsIgnoreCase("USER") && !role.equalsIgnoreCase("ADMIN")) {
-            throw new InvalidRoleException("Invalid role specified");
-        }
-
+        validateRole(role);
         List<User> users = userRepository.findByRole(Role.valueOf(role.toUpperCase()));
-
         return users.stream()
                 .map(userMapper::toUserDto)
                 .toList();
     }
 
+    @Transactional
     @Override
     public void deactivateCurrentUser() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
-            throw new UserNotAuthenticatedException("User is not authenticated");
-        }
-        String email = authentication.getName();
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UserNotFoundException("User not found"));
-
-        // Schedule account deactivation (e.g., using a background job or delayed task)
-        user.setActive(false); // Assuming you have an 'active' field in User
+        User user = getAuthenticatedUser();
+        user.setActive(false);
         user.setDeactivatedAt(LocalDateTime.now());
         userRepository.save(user);
     }
 
+    @Transactional
     @Override
-    public void deactivateUser(String email) {
-        User user = userRepository.findByEmailAndActiveTrue(normalize(email))
+    public void deactivateUser(Long userId) {
+        validateUserId(userId);
+
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
-        // Schedule account deactivation (e.g., using a background job or delayed task)
-        user.setActive(false); // Assuming you have an 'active' field in User
+        user.setActive(false);
         user.setDeactivatedAt(LocalDateTime.now());
         userRepository.save(user);
     }
 
+    @Transactional
     @Override
-    public void deleteUser(String email) {
-        User user = userRepository.findByEmail(normalize(email))
+    public void deleteUser(Long userId) {
+        validateUserId(userId);
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
-
-        // Delete the user permanently
         userRepository.delete(user);
     }
 
     @Override
-    public void requestPasswordReset(String email) {
-        User user = userRepository.findByEmail(normalize(email))
-                .orElseThrow(() -> new UserNotFoundException("User not found"));
+    public void requestPasswordReset() {
+        User user = getAuthenticatedUser();
+        if (!user.isActive()){
+            throw new UserNotActiveException("User account is not active");
+        }
 
-        // Generate reset token and expiry
-        String resetToken = jwtService.generateResetToken(user.getEmail());
-        LocalDateTime resetTokenExpiry = LocalDateTime.now().plusHours(1); // Token valid for 1 hour
-
-        // Update user with reset token and expiry
+        String resetToken = jwtService.generateToken(user.getEmail(), PASSWORD_RESET_TOKEN_EXPIRATION_MS);
         user.setResetToken(resetToken);
-        user.setResetTokenExpiry(resetTokenExpiry);
         userRepository.save(user);
     }
 
     @Override
     public void resetPassword(PasswordResetRequest request) {
+
+        if (request == null || request.getResetToken() == null || request.getNewPassword() == null) {
+            throw new InvalidUserDataException("Request cannot be null and must contain reset token and new password");
+        }
+
         User user = userRepository.findByResetToken(request.getResetToken())
                 .orElseThrow(() -> new InvalidResetTokenException("Invalid reset token"));
 
-        // Check if token is expired
-        if (user.getResetTokenExpiry() == null || user.getResetTokenExpiry().isBefore(LocalDateTime.now())) {
-            throw new InvalidResetTokenException("Reset token is expired");
+        if (!user.isActive()){
+            throw new UserNotActiveException("User account is not active");
         }
 
-        // Update password
+        if (user.getResetToken() == null || !user.getResetToken().equals(request.getResetToken())) {
+            throw new InvalidResetTokenException("Reset token has already been used or is invalid");
+        }
+
+        if(!jwtService.isTokenValid(request.getResetToken(), user.getEmail())) {
+            throw new InvalidResetTokenException("Reset token is invalid");
+        }
         user.setPassword(encoder.encode(request.getNewPassword()));
-        user.setResetToken(null); // Clear reset token after use
-        user.setResetTokenExpiry(null); // Clear expiry after use
+        user.setResetToken(null);
         userRepository.save(user);
     }
 
@@ -262,11 +241,55 @@ public class UserServiceImpl implements UserService {
         if (request == null) {
             throw new BadRequestException("Search request cannot be null");
         }
+
+        if (request.getUserId() != null && request.getUserId() < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid userId value: " + request.getUserId());
+        }
+        if (request.getName() != null && request.getName().trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Name cannot be empty");
+        }
+        if (request.getEmail() != null && !request.getEmail().matches("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid email format: " + request.getEmail());
+        }
+        if (request.getRole() != null &&
+                !request.getRole().equals(Role.ADMIN.name()) &&
+                !request.getRole().equals(Role.USER.name())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid role value: " + request.getRole());
+        }
+
         Specification<User> specification = UserSpecification.build(request);
 
         return userRepository.findAll(specification)
                 .stream()
                 .map(userMapper::toUserDto)
                 .toList();
+    }
+
+    private static void validateRegisterRequest(RegisterRequest request) {
+        if(request == null || request.getEmail() == null || request.getPassword() == null) {
+            throw new InvalidUserDataException("Request cannot be null and must contain email and password");
+        }
+    }
+
+    private static void validateLoginRequest(LoginRequest request) {
+        if (request == null || request.getEmail() == null || request.getPassword() == null) {
+            throw new InvalidUserDataException("Request cannot be null and must contain email and password");
+        }
+    }
+
+    private User getAuthenticatedUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
+            throw new UserNotAuthenticatedException("User is not authenticated");
+        }
+        String email = authentication.getName();
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+    }
+
+    private void validateUserId(Long userId) {
+        if (userId == null || userId <= 0) {
+            throw new InvalidUserDataException("User Id must be a positive number");
+        }
     }
 }

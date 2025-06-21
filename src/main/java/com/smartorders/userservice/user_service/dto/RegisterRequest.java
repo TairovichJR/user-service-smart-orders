@@ -13,7 +13,10 @@ import lombok.NoArgsConstructor;
 public class RegisterRequest {
 
     @NotBlank
-    private String name;
+    private String firstName;
+
+    @NotBlank
+    private String lastName;
 
     @NotBlank
     @Email(message = "Invalid email format")
